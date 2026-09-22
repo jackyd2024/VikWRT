@@ -1,0 +1,207 @@
+name: vikwrt
+
+on:
+#  schedule:
+#    - cron: '0 15 */15 * *' # 每 15 天的 15:00 执行一次
+  workflow_dispatch:
+
+env:
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: vikwrt.config
+  TZ: Asia/Shanghai
+  DEVICE: vikwrtAX6600
+  UPLOAD_OUTPUT: true
+  CCACHE_DIR: /workdir/openwrt/.ccache
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build-openwrt:
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: 删除旧的 Releases 保留最近4个
+      uses: dev-drprasad/delete-older-releases@master
+      with:
+          keep_latest: 4
+          delete_tags: true
+
+    - name: 删除最近的workflow 保留最近1个
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+          retain_days: 0
+          keep_minimum_runs: 1
+
+    - name: 检查配置文件是否存在
+      run: |
+        echo "【步骤1】检查配置文件"
+        CONFIG_FILE_PATH="$GITHUB_WORKSPACE/vikwrt.config"
+        if [[ -f "$CONFIG_FILE_PATH" ]]; then
+          echo "配置文件已找到: $CONFIG_FILE_PATH ✅"
+        else
+          echo "❌ 配置文件未找到，开始查找..."
+          CONFIG_FOUND=$(find $GITHUB_WORKSPACE -name "vikwrt.config" -type f)
+          if [[ -n "$CONFIG_FOUND" ]]; then
+            echo "已找到配置文件路径: $CONFIG_FOUND ✅"
+            cp -f "$CONFIG_FOUND" "$GITHUB_WORKSPACE/openwrt/.config"
+            echo "成功复制配置文件到目标位置 ✅"
+          else
+            echo "❌ 未能找到 vikwrt.config 文件，请确认文件是否存在于仓库中！"
+            exit 1
+          fi
+        fi
+
+    - name: 初始化构建环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        echo "【步骤2】初始化构建环境"
+        sudo apt update
+        sudo apt -y install ack aria2 autoconf automake bzip2 ccache cmake curl flex gcc g++ git libssl-dev libtool nano rsync unzip vim wget zlib1g-dev
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+        sudo timedatectl set-timezone "Asia/Shanghai"
+        echo "构建环境初始化完成 ✅"
+
+    - name: Free Up Disk Space
+      run: |
+        echo "清理空间"
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf /usr/local/share/powershell
+        sudo apt-get clean
+        sudo docker system prune -af || true
+        df -h  # 再次检查磁盘空间
+
+    - name: 克隆源码
+      working-directory: /workdir
+      run: |
+        echo "【步骤3】克隆源码"
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        sudo mkdir -p -m 777 /mnt/openwrt/{dl,feeds,staging_dir}
+        ln -s /mnt/openwrt/dl /workdir/openwrt/dl
+        ln -s /mnt/openwrt/feeds /workdir/openwrt/feeds
+        ln -s /mnt/openwrt/staging_dir /workdir/openwrt/staging_dir
+        echo "源码克隆完成 ✅"
+
+    - name: 恢复缓存
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache
+        restore-keys: |
+          ${{ runner.os }}-openwrt-${{ env.DEVICE }}-
+
+    - name: 限制 ccache 大小并清理磁盘
+      run: |
+        echo "【磁盘优化】设置 ccache 大小限制"
+        mkdir -p ${{ env.CCACHE_DIR }}
+        echo "max_size = 1G" > ${{ env.CCACHE_DIR }}/ccache.conf
+        ccache -z  # 重置 ccache 统计
+        
+        echo "【清理临时文件】"
+        sudo rm -rf /tmp/* || true
+        sudo apt-get clean
+        sudo apt-get autoclean
+        
+        echo "【磁盘空间检查】"
+        df -h /workdir
+
+    - name: 配置 Feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        
+      # 修改 Lan IP 和修复版本
+    - name: 修改 Lan IP 和修复版本
+      run: |
+          echo "【步骤5】修改 Lan IP 和修复版本"
+          cd openwrt
+          sed -i 's/192.168.1.1/192.168.0.1/g' package/base-files/files/bin/config_generate
+          echo "【修改完成后内容如下】"
+          grep "192.168" package/base-files/files/bin/config_generate
+          cd openwrt
+          rm -rf package/emortal/luci-app-athena-led
+          git clone https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git
+          echo "Lan IP 修改完成 ✅"
+        
+      # 组合插件
+    - name: 组合插件
+      run: |
+          echo "【步骤6】组合插件"
+          cd openwrt
+          rm -rf package/emortal/luci-app-athena-led
+          git clone https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git
+          echo "Lan IP 修改完成 ✅"
+
+    - name: 下载依赖
+      run: |
+        echo "【步骤7】下载依赖"
+        cp -f $GITHUB_WORKSPACE/vikwrt.config $GITHUB_WORKSPACE/openwrt/.config
+        cd openwrt
+        make defconfig
+        make download -j$(nproc)
+        find dl -size -1024c -exec rm -f {} \;
+        echo "依赖下载完成 ✅"
+        echo "【清理冗余文件】"
+        rm -rf build_dir/host/ccache-* || true
+        echo "【磁盘空间检查】"
+        df -h /workdir
+
+    - name: 编译固件
+      run: |
+        echo "【步骤8】编译固件"
+        cd openwrt
+        export CCACHE_DIR=${{ env.CCACHE_DIR }}
+        export CC="ccache gcc"
+        export CXX="ccache g++"
+        make -j$(nproc)
+        ccache -s
+        echo "固件编译完成 ✅"
+
+    - name: 清理编译中间文件
+      if: always()
+      run: |
+        echo "【清理编译产物】"
+        cd openwrt
+        # 清理构建目录中的无用文件
+        rm -rf build_dir/target-*/root-* || true
+        rm -rf build_dir/target-*/linux-* || true
+        # 保留最终输出文件
+        du -sh /workdir/openwrt || true
+
+    - name: 保存编译缓存
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache
+
+    - name : 上传输出文件
+      uses: actions/upload-artifact@master
+      if: env.UPLOAD_OUTPUT == 'true' && !cancelled()
+      with:
+        name: ${{ env.DEVICE }}--${{ env.FILE_DATE }}
+        path: openwrt/bin/targets
+
+    
+    - name: 设置环境变量
+      run: |
+       echo "DEVICE=$(echo '${{ env.DEVICE }}' | tr -cd '[:alnum:]-_')" >> $GITHUB_ENV
+       echo "FILE_DATE=$(date +%Y-%m-%d_%H-%M)" >> $GITHUB_ENV
+
+    - name: 发布固件至 Release
+      uses: ncipollo/release-action@v1
+      with:
+          tag: "${{ env.DEVICE }}-${{ env.FILE_DATE }}"
+          artifacts: "openwrt/bin/targets/*/*/*"
