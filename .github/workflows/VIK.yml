@@ -158,18 +158,7 @@ jobs:
         echo "【磁盘空间检查】"
         df -h /workdir
 
-    - name: 预编译 Host 工具
-      run: |
-       cd openwrt
 
-       make tools/install -j$(nproc) V=s
-       make toolchain/install -j$(nproc) V=s
-        
-    - name: 检查 Athena 编译错误
-      run: |
-       cd openwrt
-
-       make package/athena-led/compile -j1 V=s
     - name: 编译固件
       run: |
         echo "【步骤8】编译固件"
