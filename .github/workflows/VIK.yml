@@ -136,11 +136,10 @@ jobs:
       # 组合插件
     - name: 组合插件
       run: |
-          echo "【步骤6】组合插件"
-          cd openwrt
-          rm -rf package/emortal/luci-app-athena-led
-          git clone https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git
-          echo "Lan IP 修改完成 ✅"
+        cd openwrt
+        rm -rf package/emortal/luci-app-athena-led
+        git clone https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git \
+        package/JDC-AX6600-Athena-LED-Controller
 
     - name: 下载依赖
       run: |
