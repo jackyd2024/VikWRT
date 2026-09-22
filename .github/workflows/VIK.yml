@@ -158,38 +158,12 @@ jobs:
         echo "【磁盘空间检查】"
         df -h /workdir
 
-    - name: 修复 host sed
+    - name: 预编译 Host 工具
       run: |
        cd openwrt
 
-       if [ ! -e staging_dir/host/bin/sed ]; then
-        ln -sf /usr/bin/sed staging_dir/host/bin/sed
-       fi
-
-       ls -l staging_dir/host/bin/sed
-       
-    - name: 检查 host 工具
-      run: |
-        cd openwrt
-
-        echo "===== staging_dir ====="
-        ls -ld staging_dir
-        ls -ld staging_dir/host
-        ls -ld staging_dir/host/bin
-
-        echo "===== sed ====="
-        ls -l staging_dir/host/bin/sed || true
-
-        echo "===== host/bin 部分文件 ====="
-        ls -l staging_dir/host/bin | head -30
-
-        echo "===== 系统 sed ====="
-        which sed
-        ls -l /usr/bin/sed
-
-        echo "===== libdeflate ====="
-        ls -l staging_dir/host/bin/libdeflate-gzip || true
-
+       make tools/install -j$(nproc) V=s
+       make toolchain/install -j$(nproc) V=s
         
     - name: 检查 Athena 编译错误
       run: |
