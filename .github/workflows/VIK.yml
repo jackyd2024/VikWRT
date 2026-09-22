@@ -136,53 +136,23 @@ jobs:
       # 组合插件
     - name: 组合插件
       run: |
-       echo "【步骤6】替换 Athena LED 插件"
+        cd openwrt
 
-       cd openwrt
+        rm -rf package/emortal/athena-led
+        rm -rf package/emortal/luci-app-athena-led
+        rm -rf package/temp-athena
 
-       echo "===== 删除 ImmortalWRT 原版 Athena ====="
-       rm -rf package/emortal/athena-led
-       rm -rf package/emortal/luci-app-athena-led
+        git clone --depth=1 \
+          https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git \
+          package/temp-athena
 
-       echo "===== 清理之前可能残留的新版 Athena ====="
-       rm -rf package/athena-led
-       rm -rf package/luci-app-athena-led
-       rm -rf package/temp-athena
+        cp -a package/temp-athena/athena-led package/emortal/athena-led
+        cp -a package/temp-athena/luci-app-athena-led package/emortal/luci-app-athena-led
 
-       echo "===== 拉取最新版 Athena LED ====="
-       git clone --depth=1 \
-       https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git \
-       package/temp-athena
+        sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' package/emortal/athena-led/Makefile
 
-       echo "===== 安装新版核心包 ====="
-       cp -a package/temp-athena/athena-led \
-       package/emortal/athena-led
-
-       echo "===== 安装新版 LuCI ====="
-       cp -a package/temp-athena/luci-app-athena-led \
-       package/emortal/luci-app-athena-led
-
-       echo "===== 删除临时仓库 ====="
-       rm -rf package/temp-athena
-
-       echo "===== 检查新版 Athena ====="
-       echo "--- athena-led ---"
-       ls -lah package/emortal/athena-led
-
-       echo "--- luci-app-athena-led ---"
-       ls -lah package/emortal/luci-app-athena-led
-
-       echo "===== 检查版本 ====="
-       grep -E 'PKG_NAME|PKG_VERSION|PKG_RELEASE|PKG_SOURCE_URL' \
-       package/emortal/athena-led/Makefile || true
-
-       grep -E 'PKG_NAME|PKG_VERSION|PKG_RELEASE|DEPENDS' \
-       package/emortal/luci-app-athena-led/Makefile || true
-
-       echo "===== 检查 Athena 目录 ====="
-       find package -maxdepth 3 -type d -iname '*athena*' | sort
-
-       echo "Athena LED 新版插件替换完成 ✅"
+        rm -rf package/temp-athena
+        echo "【led组合完成】"
     - name: 下载依赖
       run: |
         echo "【步骤7】下载依赖"
