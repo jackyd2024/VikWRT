@@ -136,16 +136,23 @@ jobs:
       # 组合插件
     - name: 组合插件
       run: |
-      echo "【步骤6】组合插件"
-      cd openwrt/package
-      git clone --depth=1 \
-      https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git \
-      temp-athena
-      mv temp-athena/athena-led .
-      mv temp-athena/luci-app-athena-led .
-      rm -rf temp-athena
-      echo "Athena LED 导入完成"
+          echo "【步骤6】组合插件"
 
+          cd openwrt/package
+
+          rm -rf athena-led
+          rm -rf luci-app-athena-led
+          rm -rf temp-athena
+
+          git clone --depth=1 https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git temp-athena
+          temp-athena
+
+          mv temp-athena/athena-led .
+          mv temp-athena/luci-app-athena-led .
+
+          rm -rf temp-athena
+
+          echo "Athena LED 插件导入完成 ✅"
     - name: 下载依赖
       run: |
         echo "【步骤7】下载依赖"
