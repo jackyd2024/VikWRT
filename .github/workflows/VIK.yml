@@ -184,7 +184,11 @@ jobs:
         rm -rf build_dir/host/ccache-* || true
         echo "【磁盘空间检查】"
         df -h /workdir
+    - name: 检查 Athena 编译错误
+      run: |
+       cd openwrt
 
+       make package/athena-led/compile -j1 V=s
     - name: 编译固件
       run: |
         echo "【步骤8】编译固件"
