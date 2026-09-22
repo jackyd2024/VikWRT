@@ -108,21 +108,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-openwrt-${{ env.DEVICE }}-
 
-    - name: 限制 ccache 大小并清理磁盘
-      run: |
-        echo "【磁盘优化】设置 ccache 大小限制"
-        mkdir -p ${{ env.CCACHE_DIR }}
-        echo "max_size = 1G" > ${{ env.CCACHE_DIR }}/ccache.conf
-        ccache -z  # 重置 ccache 统计
-        
-        echo "【清理临时文件】"
-        sudo rm -rf /tmp/* || true
-        sudo apt-get clean
-        sudo apt-get autoclean
-        
-        echo "【磁盘空间检查】"
-        df -h /workdir
-
     - name: 配置 Feeds
       run: |
         cd openwrt
