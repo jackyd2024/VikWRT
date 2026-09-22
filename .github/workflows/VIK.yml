@@ -167,6 +167,16 @@ jobs:
         echo "【磁盘空间检查】"
         df -h /workdir
 
+    - name: 修复 host sed
+      run: |
+       cd openwrt
+
+       if [ ! -e staging_dir/host/bin/sed ]; then
+        ln -sf /usr/bin/sed staging_dir/host/bin/sed
+       fi
+
+       ls -l staging_dir/host/bin/sed
+       
     - name: 检查 host 工具
       run: |
         cd openwrt
