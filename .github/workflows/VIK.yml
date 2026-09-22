@@ -64,7 +64,13 @@ jobs:
       run: |
         echo "【步骤2】初始化构建环境"
         sudo apt update
-        sudo apt -y install ack aria2 autoconf automake bzip2 ccache cmake curl flex gcc g++ git libssl-dev libtool nano rsync unzip vim wget zlib1g-dev
+        sudo apt install -y \
+        gawk gettext git rsync unzip wget curl \
+        python3 python3-pip \
+        build-essential flex bison patch \
+        libssl-dev zlib1g-dev \
+        gcc g++ make cmake \
+        subversion pkgconf texinfo xxd
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
         sudo timedatectl set-timezone "Asia/Shanghai"
