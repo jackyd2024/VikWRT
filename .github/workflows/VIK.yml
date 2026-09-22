@@ -138,21 +138,37 @@ jobs:
       run: |
           echo "【步骤6】组合插件"
 
-          cd openwrt/package
+          cd openwrt
+
+          echo "===== 删除 ImmortalWRT 自带旧版 ====="
+          rm -rf package/emortal/luci-app-athena-led
+
+          echo "===== 进入 package 目录 ====="
+          cd package
 
           rm -rf athena-led
           rm -rf luci-app-athena-led
           rm -rf temp-athena
 
+          echo "===== 拉取最新版 Athena ====="
           git clone --depth=1 https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git temp-athena
 
-          mv temp-athena/athena-led .
-          mv temp-athena/luci-app-athena-led .
+          echo "===== 复制插件 ====="
+          cp -rf temp-athena/athena-led .
+          cp -rf temp-athena/luci-app-athena-led .
 
           rm -rf temp-athena
 
-          ls -l athena-led
-          ls -l luci-app-athena-led
+          echo "===== 检查插件目录 ====="
+          ls -lah athena-led
+          ls -lah luci-app-athena-led
+
+          echo "===== 检查 Makefile ====="
+          test -f athena-led/Makefile && echo "athena-led OK"
+          test -f luci-app-athena-led/Makefile && echo "luci-app-athena-led OK"
+
+          echo "===== 当前 Athena 相关目录 ====="
+          find ../package -type d | grep athena || true
 
           echo "Athena LED 插件导入完成 ✅"
     - name: 下载依赖
