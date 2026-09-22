@@ -145,12 +145,14 @@ jobs:
           rm -rf temp-athena
 
           git clone --depth=1 https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git temp-athena
-          temp-athena
 
           mv temp-athena/athena-led .
           mv temp-athena/luci-app-athena-led .
 
           rm -rf temp-athena
+
+          ls -l athena-led
+          ls -l luci-app-athena-led
 
           echo "Athena LED 插件导入完成 ✅"
     - name: 下载依赖
