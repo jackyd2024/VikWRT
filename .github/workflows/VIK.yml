@@ -189,7 +189,7 @@ jobs:
         cp -f $GITHUB_WORKSPACE/vikwrt.config $GITHUB_WORKSPACE/openwrt/.config
         cd openwrt
         make defconfig
-        make download -j$(nproc)
+        make download -j$(nproc) V=s
         find dl -size -1024c -exec rm -f {} \;
         echo "依赖下载完成 ✅"
         echo "【清理冗余文件】"
