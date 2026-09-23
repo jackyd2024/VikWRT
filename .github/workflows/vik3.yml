@@ -116,10 +116,10 @@ jobs:
       - name: 恢复缓存
         uses: actions/cache@v4
         with:
-        path: ${{ env.CCACHE_DIR }}
-        key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-${{ github.run_id }}
-        restore-keys: |
-          ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-
 
       - name: 配置 Feeds
         run: |
