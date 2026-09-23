@@ -184,67 +184,67 @@ jobs:
             uci set dhcp.ap2026092311.limit='150'
             uci set dhcp.ap2026092311.leasetime='12h'
             uci set dhcp.ap2026092311.dhcpv4='server'
-        fi
+          fi
 
-        #
-        # IPv4 Only
-        #
-        uci set dhcp.ap2026092311.ra='disabled'
-        uci set dhcp.ap2026092311.dhcpv6='disabled'
-        uci set dhcp.ap2026092311.ndp='disabled'
-        uci set dhcp.ap2026092311.ra_default='0'
+          #
+          # IPv4 Only
+          #
+          uci set dhcp.ap2026092311.ra='disabled'
+          uci set dhcp.ap2026092311.dhcpv6='disabled'
+          uci set dhcp.ap2026092311.ndp='disabled'
+          uci set dhcp.ap2026092311.ra_default='0'
 
-        #
-        # 加入LAN区域
-        #
-        if ! uci show firewall | grep -q "ap2026092311"; then
-            uci add_list firewall.@zone[0].network='ap2026092311'
-        fi
+          #
+          # 加入LAN区域
+          #
+          if ! uci show firewall | grep -q "ap2026092311"; then
+              uci add_list firewall.@zone[0].network='ap2026092311'
+          fi
 
-        #
-        # WiFi
-        #
+          #
+          # WiFi
+          #
 
-        # 32网段
-        uci -q get wireless.default_radio0 >/dev/null && {
-            uci set wireless.default_radio0.ssid='CMCC-ft68'
-            uci set wireless.default_radio0.network='ap2026092311'
-            uci set wireless.default_radio0.key='12345678'
-            uci set wireless.default_radio0.encryption='psk-mixed+ccmp'
-            uci set wireless.default_radio0.hidden='0'
-        }
+          # 32网段
+          uci -q get wireless.default_radio0 >/dev/null && {
+              uci set wireless.default_radio0.ssid='CMCC-ft68'
+              uci set wireless.default_radio0.network='ap2026092311'
+              uci set wireless.default_radio0.key='12345678'
+              uci set wireless.default_radio0.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio0.hidden='0'
+          }
 
-        # 主LAN 2.4G
-        uci -q get wireless.default_radio1 >/dev/null && {
-            uci set wireless.default_radio1.ssid='Ly'
-            uci set wireless.default_radio1.network='lan'
-            uci set wireless.default_radio1.key='12345678'
-            uci set wireless.default_radio1.encryption='psk-mixed+ccmp'
-            uci set wireless.default_radio1.hidden='0'
-        }
+          # 主LAN 2.4G
+          uci -q get wireless.default_radio1 >/dev/null && {
+              uci set wireless.default_radio1.ssid='Ly'
+              uci set wireless.default_radio1.network='lan'
+              uci set wireless.default_radio1.key='12345678'
+              uci set wireless.default_radio1.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio1.hidden='0'
+          }
 
-        # 主LAN 5G
-        uci -q get wireless.default_radio2 >/dev/null && {
-            uci set wireless.default_radio2.ssid='Ls'
-            uci set wireless.default_radio2.network='lan'
-            uci set wireless.default_radio2.key='12345678'
-            uci set wireless.default_radio2.encryption='psk-mixed+ccmp'
-            uci set wireless.default_radio2.hidden='0'
-        }
+          # 主LAN 5G
+          uci -q get wireless.default_radio2 >/dev/null && {
+              uci set wireless.default_radio2.ssid='Ls'
+              uci set wireless.default_radio2.network='lan'
+              uci set wireless.default_radio2.key='12345678'
+              uci set wireless.default_radio2.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio2.hidden='0'
+          }
 
-        uci commit network
-        uci commit dhcp
-        uci commit firewall
-        uci commit wireless
+          uci commit network
+          uci commit dhcp
+          uci commit firewall
+          uci commit wireless
 
-        exit 0
-        EOF
+          exit 0
+          EOF
 
-        chmod +x files/etc/uci-defaults/99-ax6600-custom
+          chmod +x files/etc/uci-defaults/99-ax6600-custom
 
-        echo "===== AX6600 CUSTOM ====="
-        ls -l files/etc/uci-defaults/
-        echo "========================="
+          echo "===== AX6600 CUSTOM ====="
+          ls -l files/etc/uci-defaults/
+          echo "========================="
         
     - name: 下载依赖
       run: |
