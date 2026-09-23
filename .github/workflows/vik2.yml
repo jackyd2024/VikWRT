@@ -28,14 +28,14 @@ jobs:
       - name: 删除旧的 Releases 保留最近4个
         uses: dev-drprasad/delete-older-releases@master
         with:
-          keep_latest: 4
+          keep_latest: 20
           delete_tags: true
 
       - name: 删除最近的workflow 保留最近1个
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 0
-          keep_minimum_runs: 1
+          keep_minimum_runs: 10
 
       - name: 检查配置文件是否存在
         run: |
