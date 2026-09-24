@@ -1,0 +1,488 @@
+name: vikwrt3
+
+on:
+  workflow_dispatch:
+
+env:
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: vikwrt.config
+  TZ: Asia/Shanghai
+  DEVICE: vikwrtAX6600
+  UPLOAD_OUTPUT: true
+  CCACHE_DIR: /workdir/openwrt/.ccache
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build-openwrt:
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: 删除旧的 Releases 保留最近4个
+        uses: dev-drprasad/delete-older-releases@master
+        with:
+          keep_latest: 20
+          delete_tags: true
+
+      - name: 删除最近的workflow 保留最近1个
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 0
+          keep_minimum_runs: 10
+
+      - name: 检查配置文件是否存在
+        run: |
+          echo "步骤1：检查配置文件"
+
+          CONFIG_FILE_PATH="$GITHUB_WORKSPACE/vikwrt.config"
+
+          if [[ -f "$CONFIG_FILE_PATH" ]]; then
+            echo "配置文件已找到: $CONFIG_FILE_PATH ✅"
+          else
+            echo "❌ 配置文件未找到，开始查找..."
+
+            CONFIG_FOUND=$(find "$GITHUB_WORKSPACE" -name "vikwrt.config" -type f)
+
+            if [[ -n "$CONFIG_FOUND" ]]; then
+              echo "已找到配置文件路径: $CONFIG_FOUND ✅"
+              cp -f "$CONFIG_FOUND" "$GITHUB_WORKSPACE/openwrt/.config"
+              echo "成功复制配置文件到目标位置 ✅"
+            else
+              echo "❌ 未能找到 vikwrt.config 文件，请确认文件是否存在于仓库中！"
+              exit 1
+            fi
+          fi
+
+      - name: 初始化构建环境
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          echo "步骤2：初始化构建环境"
+
+          sudo apt update -y
+
+          sudo apt install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib gettext \
+            genisoimage git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev \
+            libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool llvm lrzsz msmtp ninja-build p7zip p7zip-full patch pkgconf \
+            python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion \
+            swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+
+          sudo mkdir -p /workdir
+          sudo chown "$USER:$GROUPS" /workdir
+          sudo timedatectl set-timezone "Asia/Shanghai"
+
+          echo "构建环境初始化完成 ✅"
+
+      - name: Free Up Disk Space
+        run: |
+          echo "清理空间"
+
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/share/powershell
+          sudo apt-get clean
+          sudo docker system prune -af || true
+
+          df -h
+
+      - name: 克隆源码
+        working-directory: /workdir
+        run: |
+          echo "步骤3：克隆源码"
+
+          git clone "$REPO_URL" -b "$REPO_BRANCH" openwrt
+
+          ln -sf /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
+
+          sudo mkdir -p -m 777 /mnt/openwrt/{dl,feeds}
+
+          ln -s /mnt/openwrt/dl /workdir/openwrt/dl
+          ln -s /mnt/openwrt/feeds /workdir/openwrt/feeds
+
+          echo "源码克隆完成 ✅"
+
+      - name: 恢复 dl 下载缓存
+        id: dl_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /mnt/openwrt/dl
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-dl-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-${{ env.DEVICE }}-dl-
+
+      - name: 恢复 ccache 缓存
+        id: ccache_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-
+
+      - name: 配置 Feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 修改 Lan IP 和修复版本
+        run: |
+          echo "步骤5：修改 Lan IP 和修复版本"
+
+          cd openwrt
+
+          sed -i 's/192.168.1.1/192.168.0.1/g' \
+            package/base-files/files/bin/config_generate
+
+          echo "修改完成后内容如下："
+          grep "192.168" \
+            package/base-files/files/bin/config_generate
+
+          echo "Lan IP 修改完成 ✅"
+
+      - name: 组合插件
+        run: |
+          cd openwrt
+
+          rm -rf package/emortal/athena-led
+          rm -rf package/emortal/luci-app-athena-led
+          rm -rf package/temp-athena
+
+          git clone --depth=1 \
+            https://github.com/unraveloop/JDC-AX6600-Athena-LED-Controller.git \
+            package/temp-athena
+
+          cp -a \
+            package/temp-athena/athena-led \
+            package/emortal/athena-led
+
+          cp -a \
+            package/temp-athena/luci-app-athena-led \
+            package/emortal/luci-app-athena-led
+
+          sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' \
+            package/emortal/athena-led/Makefile
+
+          rm -rf package/temp-athena
+
+          echo "LED 组合完成 ✅"
+
+      - name: AX6600默认配置
+        run: |
+          cd openwrt
+
+          mkdir -p files/etc/uci-defaults
+
+          cat > files/etc/uci-defaults/99-ax6600-custom <<'AXEOF'
+          #!/bin/sh
+
+          ########################################
+          # AX6600 双网段 / IPv4-only / WiFi 默认配置
+          ########################################
+
+          # 查找默认 br-lan
+          BRLAN_DEV=$(uci show network | grep "\.name='br-lan'" | head -n1 | cut -d. -f2)
+
+          # 从默认 br-lan 中移除 lan3 / lan4
+          # 防止 lan3 / lan4 同时属于两个 bridge
+          if [ -n "$BRLAN_DEV" ]; then
+              uci -q del_list network.${BRLAN_DEV}.ports='lan3'
+              uci -q del_list network.${BRLAN_DEV}.ports='lan4'
+          fi
+
+          ########################################
+          # AX6600 性能优化
+          ########################################
+
+          uci set network.globals.packet_steering='1'
+
+          ########################################
+          # 创建 lan3 + lan4 独立网桥
+          ########################################
+
+          if ! uci -q get network.ap2026092311 >/dev/null; then
+              uci add network device >/dev/null
+
+              uci set network.@device[-1].type='bridge'
+              uci set network.@device[-1].name='ap20260923'
+
+              uci add_list network.@device[-1].ports='lan3'
+              uci add_list network.@device[-1].ports='lan4'
+
+              uci set network.ap2026092311='interface'
+              uci set network.ap2026092311.proto='static'
+              uci set network.ap2026092311.device='ap20260923'
+              uci set network.ap2026092311.ipaddr='192.168.32.1'
+              uci set network.ap2026092311.netmask='255.255.255.0'
+              uci set network.ap2026092311.delegate='0'
+          fi
+
+          ########################################
+          # DHCP
+          ########################################
+
+          if ! uci -q get dhcp.ap2026092311 >/dev/null; then
+              uci set dhcp.ap2026092311='dhcp'
+              uci set dhcp.ap2026092311.interface='ap2026092311'
+              uci set dhcp.ap2026092311.start='100'
+              uci set dhcp.ap2026092311.limit='150'
+              uci set dhcp.ap2026092311.leasetime='12h'
+              uci set dhcp.ap2026092311.dhcpv4='server'
+          fi
+
+          ########################################
+          # LAN32 IPv4 ONLY
+          ########################################
+
+          uci set dhcp.ap2026092311.ra='disabled'
+          uci set dhcp.ap2026092311.dhcpv6='disabled'
+          uci set dhcp.ap2026092311.ndp='disabled'
+          uci set dhcp.ap2026092311.ra_default='0'
+
+          uci -q del dhcp.ap2026092311.ra_flags
+          uci -q del network.ap2026092311.ip6assign
+
+          ########################################
+          # 防火墙
+          # LAN 与 LAN32 保持在当前同一个 LAN Zone
+          ########################################
+
+          if ! uci show firewall | grep -q "ap2026092311"; then
+              uci add_list firewall.@zone[0].network='ap2026092311'
+          fi
+
+          ########################################
+          # WiFi 国家码 + 信道
+          ########################################
+
+          # radio0 = CMCC-ft68 / LAN32 / 5GHz
+          # US / CH149 / HE80
+          uci -q get wireless.default_radio0 >/dev/null && {
+              uci set wireless.radio0.country='US'
+              uci set wireless.radio0.channel='149'
+              uci set wireless.radio0.htmode='HE80'
+
+              uci set wireless.default_radio0.ssid='CMCC-ft68'
+              uci set wireless.default_radio0.network='ap2026092311'
+              uci set wireless.default_radio0.key='12345678'
+              uci set wireless.default_radio0.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio0.hidden='0'
+              uci set wireless.default_radio0.disabled='0'
+          }
+
+          # radio1 = Ly / 主 LAN / 2.4GHz
+          # US / CH1 / HE20
+          uci -q get wireless.default_radio1 >/dev/null && {
+              uci set wireless.radio1.country='US'
+              uci set wireless.radio1.channel='1'
+              uci set wireless.radio1.htmode='HE20'
+
+              uci set wireless.default_radio1.ssid='Ly'
+              uci set wireless.default_radio1.network='lan'
+              uci set wireless.default_radio1.key='12345678'
+              uci set wireless.default_radio1.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio1.hidden='0'
+              uci set wireless.default_radio1.disabled='0'
+          }
+
+          # radio2 = Ls / 主 LAN / QCN9074 5GHz
+          # US / CH44 / HE160
+          uci -q get wireless.default_radio2 >/dev/null && {
+              uci set wireless.radio2.country='US'
+              uci set wireless.radio2.channel='44'
+              uci set wireless.radio2.htmode='HE160'
+
+              uci set wireless.default_radio2.ssid='Ls'
+              uci set wireless.default_radio2.network='lan'
+              uci set wireless.default_radio2.key='12345678'
+              uci set wireless.default_radio2.encryption='psk-mixed+ccmp'
+              uci set wireless.default_radio2.hidden='0'
+              uci set wireless.default_radio2.disabled='0'
+          }
+
+          ########################################
+          # 保存 UCI 配置
+          ########################################
+
+          uci commit network
+          uci commit dhcp
+          uci commit firewall
+          uci commit wireless
+
+          exit 0
+          AXEOF
+
+          chmod +x files/etc/uci-defaults/99-ax6600-custom
+
+          echo "===== AX6600 CUSTOM ====="
+          sed -n '1,280p' files/etc/uci-defaults/99-ax6600-custom
+          echo "========================="
+
+      - name: 准备配置并计算工具链缓存键
+        run: |
+          echo "准备 .config 和工具链缓存键"
+
+          cp -f \
+            "$GITHUB_WORKSPACE/vikwrt.config" \
+            "$GITHUB_WORKSPACE/openwrt/.config"
+
+          cd openwrt
+
+          make defconfig
+
+          TOOLCHAIN_HASH="$({
+            sha256sum .config
+            find tools toolchain package/devel/gcc package/libs/musl \
+              -type f \( -name 'Makefile' -o -name '*.mk' -o -name '*.patch' \) \
+              -print0 | sort -z | \
+              while IFS= read -r -d '' file; do
+                sha256sum "$file"
+              done
+          } | sha256sum | cut -d' ' -f1)"
+
+          if [ -z "$TOOLCHAIN_HASH" ]; then
+            echo "❌ 工具链缓存键计算失败"
+            exit 1
+          fi
+
+          echo "TOOLCHAIN_HASH=$TOOLCHAIN_HASH"
+          echo "TOOLCHAIN_HASH=$TOOLCHAIN_HASH" >> "$GITHUB_ENV"
+
+      - name: 恢复 Host Tools + Toolchain 缓存
+        id: toolchain_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            /workdir/openwrt/build_dir/host
+            /workdir/openwrt/staging_dir/host
+            /workdir/openwrt/build_dir/toolchain-*
+            /workdir/openwrt/staging_dir/toolchain-*
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-toolchain-${{ env.TOOLCHAIN_HASH }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-${{ env.DEVICE }}-toolchain-
+
+      - name: 预构建 Host Tools + Toolchain
+        id: prebuild_toolchain
+        if: steps.toolchain_cache.outputs.cache-hit != 'true'
+        run: |
+          echo "工具链缓存未命中或仅恢复了旧缓存，开始补齐 Host Tools + Toolchain"
+          cd openwrt
+
+          make tools/install -j"$(nproc)" V=s
+          make toolchain/install -j"$(nproc)" V=s
+
+          echo "Host Tools + Toolchain 准备完成 ✅"
+          echo "【工具链目录】"
+          du -sh build_dir/host staging_dir/host build_dir/toolchain-* staging_dir/toolchain-* 2>/dev/null || true
+
+      - name: 下载依赖
+        run: |
+          echo "步骤7：下载依赖"
+
+          cd openwrt
+
+          make defconfig
+          make download -j"$(nproc)" V=s
+
+          find dl -size -1024c -exec rm -f {} \;
+
+          echo "依赖下载完成 ✅"
+
+          echo "【磁盘空间检查】"
+          df -h /workdir
+
+      - name: 编译固件
+        run: |
+          echo "步骤8：编译固件"
+
+          cd openwrt
+
+          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CC="ccache gcc"
+          export CXX="ccache g++"
+
+          make -j"$(nproc)"
+
+          echo "===== ccache 统计 ====="
+          ccache -s
+          echo "======================="
+
+          echo "固件编译完成 ✅"
+
+      - name: 清理编译中间文件
+        if: always()
+        run: |
+          echo "清理编译产物"
+
+          cd openwrt
+
+          rm -rf build_dir/target-*/root-* || true
+          rm -rf build_dir/target-*/linux-* || true
+
+          echo "【缓存目录大小】"
+          du -sh \
+            /mnt/openwrt/dl \
+            /workdir/openwrt/.ccache \
+            /workdir/openwrt/build_dir/host \
+            /workdir/openwrt/staging_dir/host \
+            /workdir/openwrt/build_dir/toolchain-* \
+            /workdir/openwrt/staging_dir/toolchain-* \
+            2>/dev/null || true
+
+          echo "【磁盘空间】"
+          df -h /workdir
+
+      - name: 保存 Host Tools + Toolchain 缓存
+        if: always() && steps.toolchain_cache.outputs.cache-hit != 'true' && steps.prebuild_toolchain.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /workdir/openwrt/build_dir/host
+            /workdir/openwrt/staging_dir/host
+            /workdir/openwrt/build_dir/toolchain-*
+            /workdir/openwrt/staging_dir/toolchain-*
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-toolchain-${{ env.TOOLCHAIN_HASH }}
+
+      - name: 保存 ccache 缓存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-${{ github.run_id }}
+
+      - name: 保存 dl 下载缓存
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/openwrt/dl
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-dl-${{ github.run_id }}
+
+      - name: 设置环境变量
+        run: |
+          echo "DEVICE=$(echo '${{ env.DEVICE }}' | tr -cd '[:alnum:]-_')" >> "$GITHUB_ENV"
+          echo "FILE_DATE=$(date +%Y-%m-%d_%H-%M)" >> "$GITHUB_ENV"
+
+      - name: 上传输出文件
+        if: env.UPLOAD_OUTPUT == 'true' && !cancelled()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.DEVICE }}--${{ env.FILE_DATE }}
+          path: openwrt/bin/targets
+
+      - name: 发布固件至 Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "${{ env.DEVICE }}-${{ env.FILE_DATE }}"
+          artifacts: "openwrt/bin/targets/*/*/*"
