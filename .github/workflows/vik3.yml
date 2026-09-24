@@ -117,7 +117,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-${{ github.run_id }}
+          key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache
           restore-keys: |
             ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache-
 
@@ -178,9 +178,34 @@ jobs:
           cat > files/etc/uci-defaults/99-ax6600-custom <<'EOF'
           #!/bin/sh
 
+          ########################################
+          # AX6600 双网段 / IPv4-only / WiFi 默认配置
+          ########################################
+
           #
-          # 创建 lan3+lan4 网桥
+          # 查找默认 br-lan
           #
+          BRLAN_DEV=$(uci show network | grep "\.name='br-lan'" | head -n1 | cut -d. -f2)
+
+          #
+          # 从默认 br-lan 中移除 lan3 / lan4
+          # 防止 lan3/lan4 同时属于两个 bridge
+          #
+          if [ -n "$BRLAN_DEV" ]; then
+              uci -q del_list network.${BRLAN_DEV}.ports='lan3'
+              uci -q del_list network.${BRLAN_DEV}.ports='lan4'
+          fi
+
+          ########################################
+          # AX6600 性能优化
+          ########################################
+
+          uci set network.globals.packet_steering='1'
+
+          ########################################
+          # 创建 lan3 + lan4 独立网桥
+          ########################################
+
           if ! uci -q get network.ap2026092311 >/dev/null; then
               uci add network device >/dev/null
 
@@ -198,9 +223,10 @@ jobs:
               uci set network.ap2026092311.delegate='0'
           fi
 
-          #
+          ########################################
           # DHCP
-          #
+          ########################################
+
           if ! uci -q get dhcp.ap2026092311 >/dev/null; then
               uci set dhcp.ap2026092311='dhcp'
               uci set dhcp.ap2026092311.interface='ap2026092311'
@@ -210,51 +236,89 @@ jobs:
               uci set dhcp.ap2026092311.dhcpv4='server'
           fi
 
-          #
-          # IPv4 Only
-          #
+          ########################################
+          # LAN32 IPv4 ONLY
+          ########################################
+
           uci set dhcp.ap2026092311.ra='disabled'
           uci set dhcp.ap2026092311.dhcpv6='disabled'
           uci set dhcp.ap2026092311.ndp='disabled'
           uci set dhcp.ap2026092311.ra_default='0'
 
-          #
-          # 加入 LAN 区域
-          #
+          # 清理可能残留的 IPv6 前缀 / RA 标志
+          uci -q del dhcp.ap2026092311.ra_flags
+          uci -q del network.ap2026092311.ip6assign
+
+          ########################################
+          # 防火墙
+          # LAN 与 LAN32 保持在当前同一个 LAN Zone
+          ########################################
+
           if ! uci show firewall | grep -q "ap2026092311"; then
               uci add_list firewall.@zone[0].network='ap2026092311'
           fi
 
-          #
-          # WiFi
-          #
+          ########################################
+          # WiFi 国家码
+          ########################################
 
-          # 32 网段
+          ########################################
+          # radio0 = CMCC-ft68 / LAN32 / 5GHz
+          # 信道 149 / HE80
+          ########################################
+
           uci -q get wireless.default_radio0 >/dev/null && {
+              uci set wireless.radio0.country='US'
+              uci set wireless.radio0.channel='149'
+              uci set wireless.radio0.htmode='HE80'
+
               uci set wireless.default_radio0.ssid='CMCC-ft68'
               uci set wireless.default_radio0.network='ap2026092311'
               uci set wireless.default_radio0.key='12345678'
               uci set wireless.default_radio0.encryption='psk-mixed+ccmp'
               uci set wireless.default_radio0.hidden='0'
+              uci set wireless.default_radio0.disabled='0'
           }
 
-          # 主 LAN 2.4G
+          ########################################
+          # radio1 = Ly / 主 LAN / 2.4GHz
+          # 信道 1 / HE20
+          ########################################
+
           uci -q get wireless.default_radio1 >/dev/null && {
+              uci set wireless.radio1.country='US'
+              uci set wireless.radio1.channel='1'
+              uci set wireless.radio1.htmode='HE20'
+
               uci set wireless.default_radio1.ssid='Ly'
               uci set wireless.default_radio1.network='lan'
               uci set wireless.default_radio1.key='12345678'
               uci set wireless.default_radio1.encryption='psk-mixed+ccmp'
               uci set wireless.default_radio1.hidden='0'
+              uci set wireless.default_radio1.disabled='0'
           }
 
-          # 主 LAN 5G
+          ########################################
+          # radio2 = Ls / 主 LAN / QCN9074 5GHz
+          # 信道 44 / HE160
+          ########################################
+
           uci -q get wireless.default_radio2 >/dev/null && {
+              uci set wireless.radio2.country='US'
+              uci set wireless.radio2.channel='44'
+              uci set wireless.radio2.htmode='HE160'
+
               uci set wireless.default_radio2.ssid='Ls'
               uci set wireless.default_radio2.network='lan'
               uci set wireless.default_radio2.key='12345678'
               uci set wireless.default_radio2.encryption='psk-mixed+ccmp'
               uci set wireless.default_radio2.hidden='0'
+              uci set wireless.default_radio2.disabled='0'
           }
+
+          ########################################
+          # 保存 UCI 配置
+          ########################################
 
           uci commit network
           uci commit dhcp
@@ -267,7 +331,7 @@ jobs:
           chmod +x files/etc/uci-defaults/99-ax6600-custom
 
           echo "===== AX6600 CUSTOM ====="
-          ls -l files/etc/uci-defaults/
+          sed -n '1,260p' files/etc/uci-defaults/99-ax6600-custom
           echo "========================="
 
       - name: 下载依赖
@@ -324,7 +388,7 @@ jobs:
           du -sh /workdir/openwrt || true
 
       - name: 保存编译缓存
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ runner.os }}-openwrt-${{ env.DEVICE }}-ccache
