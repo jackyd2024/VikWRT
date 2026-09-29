@@ -407,11 +407,11 @@ jobs:
       - name: 检查 ATH11K 内存 Profile
         run: |
           echo "================ OpenWrt .config ================"
-          grep -n "ATH11K_MEM_PROFILE" .config || true
+          grep -n "ATH11K_MEM_PROFILE" vikwrt.config || true
 
           echo
           echo "================ 搜索 Linux 内核 .config ================"
-          find build_dir -type f -name .config 2>/dev/null | while read f; do
+          find build_dir -type f -name vikwrt.config 2>/dev/null | while read f; do
             echo
             echo "===== $f ====="
             grep -n "ATH11K_MEM_PROFILE" "$f" || true
