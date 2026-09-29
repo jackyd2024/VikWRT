@@ -402,7 +402,26 @@ jobs:
 
           echo "【磁盘空间检查】"
           df -h /workdir
+      
 
+      - name: 检查 ATH11K 内存 Profile
+        run: |
+          echo "================ OpenWrt .config ================"
+          grep -n "ATH11K_MEM_PROFILE" .config || true
+
+          echo
+          echo "================ 搜索 Linux 内核 .config ================"
+          find build_dir -type f -name .config 2>/dev/null | while read f; do
+            echo
+            echo "===== $f ====="
+            grep -n "ATH11K_MEM_PROFILE" "$f" || true
+          done
+
+          echo
+          echo "================ 源码中的 ATH11K Profile ================"
+          grep -R "ATH11K_MEM_PROFILE" package/kernel/mac80211/ath.mk \
+          package/kernel/mac80211/patches/nss/ath11k 2>/dev/null || true
+      
       - name: 编译固件
         run: |
           echo "步骤8：编译固件"
