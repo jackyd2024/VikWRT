@@ -167,12 +167,9 @@ jobs:
 
           echo "========== PassWall 官方 Makefile 版本 =========="
           grep -nE '^(PKG_VERSION|PKG_RELEASE):=' feeds/passwall_luci/luci-app-passwall/Makefile || true
-
-          echo "========== Athena LED 软件包链接 =========="
-          ls -l package/feeds/athena_led/
           
           sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' \
-          package/feeds/athena_led/Makefile
+          /feeds/athena_led/athena-led/Makefile
 
           # 确认官方源里确实存在两个 Makefile
           test -f feeds/athena_led/athena-led/Makefile
