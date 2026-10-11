@@ -170,6 +170,9 @@ jobs:
 
           echo "========== Athena LED 软件包链接 =========="
           ls -l package/feeds/athena_led/
+          
+          sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' \
+          package/feeds/athena_led/Makefile
 
           # 确认官方源里确实存在两个 Makefile
           test -f feeds/athena_led/athena-led/Makefile
