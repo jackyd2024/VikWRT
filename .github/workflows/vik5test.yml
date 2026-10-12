@@ -168,8 +168,38 @@ jobs:
           echo "========== PassWall 官方 Makefile 版本 =========="
           grep -nE '^(PKG_VERSION|PKG_RELEASE):=' feeds/passwall_luci/luci-app-passwall/Makefile || true
           
-          sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' \
-          /feeds/athena_led/athena-led/Makefile
+          echo "========== Athena LED Makefile 版本检查 =========="
+
+          for f in \
+            package/feeds/athena_led/athena-led/Makefile \
+            package/feeds/athena_led/luci-app-athena-led/Makefile
+          do
+            if [ -f "$f" ]; then
+              echo "----- $f -----"
+              grep -nE '^(PKG_VERSION|PKG_RELEASE):=' "$f" || true
+            else
+              echo "文件不存在：$f"
+            fi
+          done
+
+          # 仅将 Athena LED 核心程序的 PKG_VERSION 修改为 2.4.0
+          CORE_MAKEFILE="package/feeds/athena_led/athena-led/Makefile"
+
+          if [ ! -f "$CORE_MAKEFILE" ]; then
+            echo "错误：找不到 Athena LED 核心程序 Makefile"
+            exit 1
+          fi
+
+          if grep -q '^PKG_VERSION:=' "$CORE_MAKEFILE"; then
+            sed -i 's/^PKG_VERSION:=.*/PKG_VERSION:=2.4.0/' \
+              "$CORE_MAKEFILE"
+          else
+            echo "错误：核心程序 Makefile 中没有 PKG_VERSION 字段"
+            exit 1
+          fi
+
+          echo "========== 修改后的核心程序版本 =========="
+          grep -nE '^(PKG_VERSION|PKG_RELEASE):=' "$CORE_MAKEFILE"
 
           # 确认官方源里确实存在两个 Makefile
           test -f feeds/athena_led/athena-led/Makefile
